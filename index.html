@@ -413,7 +413,7 @@ function welcome() {
   <div class="err" id="w-err"></div>
   <button class="cta" data-a="start">Get started</button>
   <div class="or">or</div>
-  <button class="sec" data-a="google">${GOOGLE}Continue with Google</button>
+  <button class="sec" data-a="google"${U.signing ? ' disabled' : ''}>${GOOGLE}<span>${U.signing ? 'Signing in…' : 'Continue with Google'}</span></button>
   <p class="tiny" style="text-align:center;margin:0">Already use Watchd on another device? Sign in to bring your data here. Without an account, everything stays on this device.</p>
 </main>`;
 }
@@ -731,7 +731,7 @@ function syncCard() {
   if (!u) return `<div class="card" style="padding:12px">${head}<div class="syncbox">
     <div class="t15">Use Watchd on all your devices</div>
     <div class="sub" style="font-size:13.5px;margin-top:4px">Sign in with Google to back up your data and keep your phone and computer in sync.</div>
-    <button class="sec" data-a="google">${GOOGLE}Continue with Google</button></div></div>`;
+    <button class="sec" data-a="google"${U.signing ? ' disabled' : ''}>${GOOGLE}<span>${U.signing ? 'Signing in…' : 'Continue with Google'}</span></button></div></div>`;
   const name = u.displayName || u.email || 'Google account';
   return `<div class="card" style="padding:12px">${head}<div class="inner">
     <div class="li" style="justify-content:flex-start;gap:12px"><span class="gav" aria-hidden="true">${esc(name.trim()[0].toUpperCase())}</span><span style="min-width:0"><span class="t15 clamp" style="display:block">${esc(name)}</span>${u.email && u.email !== name ? `<span class="sub clamp" style="display:block">${esc(u.email)}</span>` : ''}</span></div>
@@ -986,23 +986,30 @@ async function loadFB() {
   const local = /^(localhost|127\.0\.0\.1)$/.test(location.hostname);
   firebase.initializeApp({ ...FB, authDomain: local ? FB.authDomain : location.host });
   fb = { auth: firebase.auth(), db: firebase.firestore() };
-  fb.auth.getRedirectResult().catch(e => toast(signInError(e)));
+  fb.auth.getRedirectResult().catch(e => toast(signInError(e))).finally(() => { if (authPending()) { authPending(false); setSigning(false); } });
   fb.auth.onAuthStateChanged(onUser);
   return fb;
 }
 const signInError = e => /unauthorized-domain/.test(e.code || '') ? "This site isn't on Firebase's list of authorized domains yet."
   : /network-request-failed/.test(e.code || '') ? "You're offline. Connect to sign in." : "Sign-in didn't finish. Try again.";
+// Set while Google sends you away and back (redirect sign-in), so the app finishes signing in when it reopens.
+const authPending = v => { try { if (v === undefined) return localStorage.getItem('watchd-auth') === '1'; v ? localStorage.setItem('watchd-auth', '1') : localStorage.removeItem('watchd-auth'); } catch (e) {} };
+function setSigning(v) { U.signing = v; document.querySelectorAll('[data-a="google"]').forEach(b => { b.disabled = v; b.lastChild.textContent = v ? 'Signing in…' : 'Continue with Google'; }); }
 async function signIn() {
-  let f; try { f = await loadFB(); } catch (e) { return toast("You're offline. Connect to sign in."); }
-  if (!f) return toast("Google sign-in isn't connected yet. Add your Firebase settings to turn it on.");
+  if (U.signing) return;
+  setSigning(true);
+  let f; try { f = await loadFB(); } catch (e) { setSigning(false); return toast("You're offline. Connect to sign in."); }
+  if (!f) { setSigning(false); return toast("Google sign-in isn't connected yet. Add your Firebase settings to turn it on."); }
   const provider = new firebase.auth.GoogleAuthProvider();
   provider.setCustomParameters({ prompt: 'select_account' });
   // Home Screen apps can't open popups reliably, so they go to Google and come back instead.
   const standalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone;
-  try { if (standalone) return await f.auth.signInWithRedirect(provider); await f.auth.signInWithPopup(provider); }
+  const redirect = () => { authPending(true); return f.auth.signInWithRedirect(provider); };
+  try { if (standalone) return await redirect(); await f.auth.signInWithPopup(provider); }
   catch (e) {
-    if (/popup-blocked|operation-not-supported/.test(e.code || '')) { try { return await f.auth.signInWithRedirect(provider); } catch (e2) { e = e2; } }
+    if (/popup-blocked|operation-not-supported/.test(e.code || '')) { try { return await redirect(); } catch (e2) { e = e2; authPending(false); } }
     if (!/popup-closed|cancelled-popup/.test(e.code || '')) toast(signInError(e));
+    setSigning(false);
   }
 }
 // Newest change wins, per title and per hidden entry. Returns true if anything on this device changed.
@@ -1014,10 +1021,14 @@ function mergeCloud(c) {
 }
 let unsub = null;
 async function onUser(u) {
+  const fresh = U.signing || authPending();
   U.user = u;
   if (u) {
     const wasNew = !S.name;
     S.signedIn = true; if (!S.name) S.name = (u.displayName || '').split(' ')[0] || 'Friend';
+    U.signing = false; authPending(false); U.sync = 'syncing';
+    if (!wasNew) render();
+    if (fresh) toast(`Signed in as ${u.email || u.displayName || 'your Google account'}`);
     const ref = fb.db.collection('users').doc(u.uid);
     try { const snap = await ref.get(); if (snap.exists) { const c = snap.data(); mergeCloud(c); if (wasNew && c.name) S.name = c.name; } } catch (e) {}
     persist(); push();
@@ -1220,7 +1231,7 @@ addEventListener('hashchange', () => { const p = parseShareHash(); if (p) { if (
 applyTheme(S.theme);
 U.pending = parseShareHash();
 if (S.name && U.pending) { const p = U.pending; U.pending = null; openShared(p); } else render();
-if (FB.apiKey && S.signedIn) loadFB().catch(() => {});
+if (FB.apiKey && (S.signedIn || authPending())) { if (authPending()) U.signing = true; loadFB().catch(() => {}); }
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
 </script>
 </body>
