@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+<rect width="1200" height="630" fill="#000"/>
+<rect x="235" y="195" width="240" height="240" rx="56" fill="#fff"/>
+<g transform="translate(275.8 235.8) scale(3.3)" fill="#000" stroke="#000"><path fill-rule="evenodd" d="M4 24C10 13 17 9 24 9S38 13 44 24C38 35 31 39 24 39S10 35 4 24ZM33.5 24a9.5 9.5 0 1 0-19 0a9.5 9.5 0 1 0 19 0Z"/><path d="M21 19L30.5 24L21 29Z" stroke-width="1.5" stroke-linejoin="round"/></g>
+<text x="539" y="300" font-family="Onest" font-weight="700" font-size="120" letter-spacing="-2" fill="#fff">Watchd</text>
+<text x="541" y="372" font-family="Onest" font-weight="400" font-size="36" fill="#E6E6E6">Track what you watch.</text>
+<text x="541" y="418" font-family="Onest" font-weight="400" font-size="36" fill="#E6E6E6">Get picks you'll like.</text>
+<text x="541" y="478" font-family="Onest" font-weight="400" font-size="22" fill="#8F8F8F">watchd-stat.vercel.app</text>
+</svg>

@@ -1,0 +1,5 @@
+{
+  "rewrites": [
+    { "source": "/__/auth/:path*", "destination": "https://watchd-ddc0f.firebaseapp.com/__/auth/:path*" }
+  ]
+}
