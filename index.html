@@ -156,6 +156,58 @@ button{cursor:pointer;background:none;border:none;padding:0}
 .sec:disabled{opacity:.4;cursor:default}
 .sk{background:var(--card);border-radius:20px}
 .stepl{display:flex;flex-direction:column;gap:2px;min-height:44px;font-size:13px;font-weight:500}
+/* ===== Phase 2: responsive layout (desktop and tablet) ===== */
+.cols,.cols>div,.grid,.masonry{display:contents}
+.nav .brandmark{display:none}
+.nav button.act .t{display:none}
+@media (min-width:768px){
+  .app{max-width:760px;padding-left:24px;padding-right:24px}
+  .cols{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);gap:18px;align-items:start}
+  .cols>div{display:flex;flex-direction:column;gap:18px;min-width:0}
+  .grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px;align-items:start}
+  .masonry{display:block;columns:2;column-gap:18px}
+  .masonry>*{break-inside:avoid;margin:0 0 18px}
+  .scrim{align-items:center;padding:24px}
+  .sheet{border-radius:26px;max-width:520px;max-height:min(86vh,860px);padding:16px 20px 20px}
+  .sheet .grab{display:none}
+  .composer .search{max-width:712px}
+}
+@media (min-width:768px) and (prefers-reduced-motion:no-preference){
+  .sheet{animation:pop .18s ease-out}
+  @keyframes pop{from{transform:scale(.97);opacity:0}to{transform:none;opacity:1}}
+}
+@media (min-width:1024px){
+  body.nav-on{padding-left:248px}
+  body.nav-on .toast{left:calc(50% + 124px)}
+  .app{max-width:1080px;padding:28px 40px 48px}
+  .welcome{max-width:480px}
+  .navwrap{top:0;bottom:0;right:auto;width:248px;padding:0;display:block}
+  .nav{flex-direction:column;align-items:stretch;height:100%;border-radius:0;border:none;border-right:1px solid var(--line);box-shadow:none;background:var(--bg);padding:calc(20px + env(safe-area-inset-top,0px)) 14px 20px;gap:4px}
+  .nav .brandmark{display:flex;align-items:center;gap:10px;padding:2px 10px 22px;font-size:20px;font-weight:600;letter-spacing:-.02em}
+  .nav .brandmark .mark{width:34px;height:34px;border-radius:10px;background:var(--fill);color:var(--on);display:flex;align-items:center;justify-content:center}
+  .nav button{justify-content:flex-start;height:46px;border-radius:14px;padding:0 14px;gap:12px;font-size:14.5px}
+  .nav button .t{display:inline}
+  .nav button.act .t{display:inline}
+  .nav .div{display:none}
+  .nav .act{width:auto;height:46px;border-radius:14px;padding:0 14px;justify-content:flex-start;background:var(--card);margin-top:auto}
+  .composer{left:248px;bottom:24px}
+  .composer .search{max-width:1000px}
+}
+@media (hover:hover){
+  .nav button:not(.on):hover{background:var(--card);color:var(--ink)}
+  .nav .act:not(.on):hover{background:var(--track)}
+  button.card:hover,.lirow:hover{opacity:.82}
+}
+/* ===== Phase 2: guided tour ===== */
+.tour{position:fixed;inset:0;z-index:30}
+.tour-ring{position:fixed;border-radius:16px;box-shadow:0 0 0 3px #fff,0 0 0 9999px rgba(0,0,0,.6);pointer-events:none}
+.tour-tip{position:fixed;width:min(320px,calc(100vw - 32px));background:var(--card2);color:var(--ink);border-radius:20px;padding:16px 16px 14px;box-shadow:0 10px 40px rgba(0,0,0,.3)}
+.tour-tip .t15{font-size:16px}
+.tour-d{font-size:14px;color:var(--muted);margin:6px 0 14px;line-height:1.45}
+.tour-arrow{position:absolute;width:14px;height:14px;background:var(--card2);transform:rotate(45deg);border-radius:2px}
+.tour-skip{height:40px;padding:0 12px;font-size:14px;color:var(--muted);font-weight:500}
+.tour-next{height:40px;padding:0 20px;border-radius:20px;background:var(--fill);color:var(--on);font-size:14px;font-weight:600}
+@media (prefers-reduced-motion:no-preference){.tour-ring,.tour-tip{transition:top .2s ease,left .2s ease,width .2s ease,height .2s ease}}
 </style>
 </head>
 <body>
@@ -386,20 +438,38 @@ async function saveFile(name, text, type) {
   setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000); return true;
 }
 
+/* ===== Layout helpers ===== */
+// Two-column pages from 768px. On phones .cols is display:contents, so the phone layout is untouched.
+const wideMQ = matchMedia('(min-width:768px)');
+const wide = () => wideMQ.matches;
+const cols = (main, side) => `<div class="cols"><div>${main}</div><div>${side}</div></div>`;
+const isIOS = () => /iPhone|iPad|iPod/.test(navigator.userAgent) || (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1);
+const isAndroid = () => /Android/.test(navigator.userAgent);
+function installHint() {
+  if (isIOS()) return 'In Safari, tap Share, then Add to Home Screen. Watchd opens full screen, and your library is still there when you\'re offline.';
+  if (isAndroid()) return 'In Chrome, tap the ⋮ menu, then Add to Home screen or Install app. Watchd opens full screen, and your library is still there when you\'re offline.';
+  return 'In Chrome or Edge, click the install icon in the address bar. Watchd opens in its own window, and your library is still there when you\'re offline.';
+}
+
 /* ===== Render ===== */
 function render() {
-  if (!S.name) { $('#root').innerHTML = welcome(); $('#navroot').innerHTML = ''; return; }
+  if (!S.name) { $('#root').innerHTML = welcome(); $('#navroot').innerHTML = ''; document.body.classList.remove('nav-on'); return; }
   const p = U.page;
   if (p === 'detail' && !U.cur) U.page = 'home';
   const views = { home, library, ask, settings, detail, shared, person, stats };
   $('#root').innerHTML = `<main class="app${p === 'ask' ? ' ask' : ''}">${(views[U.page] || home)()}</main>${U.page === 'ask' ? composer() : ''}`;
   $('#navroot').innerHTML = ['detail', 'shared', 'person', 'stats'].includes(U.page) ? '' : nav();
+  document.body.classList.toggle('nav-on', !!$('#navroot').innerHTML);
+  if (tour) placeTour();
+  else if (U.page === 'home') maybeTour('main');
+  else if (U.page === 'library' && lib().length) maybeTour('library');
+  else if (U.page === 'detail' && U.cur) { const d = U.det.get(K(U.cur.type, U.cur.id)); if (d && !d.error) maybeTour('detail'); }
 }
 
 function nav() {
   const b = (id, icon, label) => `<button class="${U.page === id ? 'on' : ''}" data-a="go" data-p="${id}" aria-label="${label}"${U.page === id ? ' aria-current="page"' : ''}>${ic(icon)}<span class="t">${label}</span></button>`;
   const onAsk = U.page === 'ask';
-  return `<div class="navwrap"><nav class="nav" aria-label="Main">${b('home', 'home', 'Home')}${b('library', 'bookmark', 'Library')}${b('settings', 'settings', 'Settings')}<span class="div" aria-hidden="true"></span><button class="act${onAsk ? ' on' : ''}" data-a="go" data-p="ask" aria-label="Ask for picks"${onAsk ? ' aria-current="page"' : ''}>${ic('sparkles', 22)}</button></nav></div>`;
+  return `<div class="navwrap"><nav class="nav" aria-label="Main"><div class="brandmark" aria-hidden="true"><span class="mark">${LOGO(22)}</span><span>Watchd</span></div>${b('home', 'home', 'Home')}${b('library', 'bookmark', 'Library')}${b('settings', 'settings', 'Settings')}<span class="div" aria-hidden="true"></span><button class="act${onAsk ? ' on' : ''}" data-a="go" data-p="ask" aria-label="Ask for picks"${onAsk ? ' aria-current="page"' : ''}>${ic('sparkles', 22)}<span class="t">Ask</span></button></nav></div>`;
 }
 
 function welcome() {
@@ -429,32 +499,35 @@ function home() {
   const recent = [...L].sort((a, b) => b.addedAt - a.addedAt).slice(0, 4);
   loadTrending();
   const tr = U.trend;
-  return `<header class="row">
+  const P = {};
+  P.head = `<header class="row">
     <div style="display:flex;gap:12px;align-items:center;min-width:0"><div class="av">${esc(S.name[0].toUpperCase())}</div>
       <div style="min-width:0"><div class="t15 clamp">Hello, ${esc(S.name)}</div><div class="sub">${L.length ? `${L.length} saved, ${fin} finished` : 'Your library is empty'}</div></div></div>
-  </header>
-  <section class="blk">
+  </header>`;
+  P.hero = `<section class="blk">
     <div class="row" style="align-items:flex-start"><div><div class="cap">Watching now</div><div class="amt">${w.length} ${w.length === 1 ? 'title' : 'titles'}</div></div>
       <button class="pill sm" data-a="seewatching">See all</button></div>
     <div class="g2" style="margin-top:18px">
-      <button class="pill" data-a="search">${ic('search', 18)}Find a title</button>
+      <button class="pill" data-a="search" data-tour="find">${ic('search', 18)}Find a title</button>
       <button class="pill" data-a="go" data-p="ask">${ic('sparkles', 18)}Ask for picks</button>
     </div>
-  </section>
-  ${w.length ? `<div style="display:flex;flex-direction:column;gap:10px"><h2 class="h2">Continue watching</h2>${w.slice(0, 3).map(x => {
+  </section>`;
+  P.cont = `${w.length ? `<div style="display:flex;flex-direction:column;gap:10px" data-tour="continue"><h2 class="h2">Continue watching</h2>${w.slice(0, 3).map(x => {
     const pct = x.type === 'tv' && x.total ? Math.round(x.progress / x.total * 100) : null;
     return `<button class="card row" data-a="open" data-t="${x.type}" data-id="${x.id}" style="justify-content:flex-start;gap:12px">${poster(x.poster)}<span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:4px"><span class="ttl clamp">${esc(x.title)}</span>${pct !== null ? `<span class="bar" style="margin-top:4px"><i style="width:${pct}%"></i></span><span class="sub">${esc(progressText(x))}</span>` : `<span class="sub">${esc([x.year, typeName(x.type)].filter(Boolean).join(', '))}</span>`}</span></button>`;
-  }).join('')}</div>` : ''}
-  ${upcoming()}
-  ${becauseYouLiked()}
-  <div><h2 class="h2" style="margin-bottom:10px">Trending this week</h2>
+  }).join('')}</div>` : ''}`;
+  P.up = upcoming();
+  P.byl = becauseYouLiked();
+  P.trend = `<div data-tour="trending"><h2 class="h2" style="margin-bottom:10px">Trending this week</h2>
     ${Array.isArray(tr) ? (tr.length ? `<div class="rail" data-keep="trend">${shown(tr).map(m => railCard(m)).join('')}</div>`
       : `<p class="sub" style="margin:0">Connect to the internet to see what's trending.</p>`)
       : SKEL}
-  </div>
-  ${genreSection()}
-  ${L.length ? `<div class="card" style="padding:12px"><div class="row" style="padding:2px 4px 8px"><span class="sub" style="font-size:14px">Recently added</span><button class="sub" data-a="go" data-p="library" style="font-size:14px;color:var(--ink);font-weight:500;min-height:32px">See all</button></div><div class="inner">${recent.map(x => rowItem(x, `<span class="chip ${STC[x.status]}">${ST[x.status]}</span>`)).join('')}</div></div>`
+  </div>`;
+  P.genre = genreSection();
+  P.recent = `${L.length ? `<div class="card" style="padding:12px"><div class="row" style="padding:2px 4px 8px"><span class="sub" style="font-size:14px">Recently added</span><button class="sub" data-a="go" data-p="library" style="font-size:14px;color:var(--ink);font-weight:500;min-height:32px">See all</button></div><div class="inner">${recent.map(x => rowItem(x, `<span class="chip ${STC[x.status]}">${ST[x.status]}</span>`)).join('')}</div></div>`
     : `<div class="card empty">${ic('bookmark', 22)}<div class="t15">Nothing saved yet</div><div class="sub">Find a movie or series to start your list.</div><button class="cta" data-a="search" style="height:44px;width:auto;padding:0 20px;font-size:14px">Find a title</button></div>`}`;
+  if (!wide()) return P.head + P.hero + P.cont + P.up + P.byl + P.trend + P.genre + P.recent;
+  return P.head + cols(P.hero + P.cont + P.trend + P.byl + P.genre, P.up + P.recent);
 }
 
 // Series in the library that have a new episode on the way.
@@ -487,7 +560,7 @@ function genreSection() {
   if (sel) loadGenre(t, sel);
   const res = sel ? U.gRes.get(`${t}:${sel}`) : null;
   const tb = (v, l) => `<button class="${t === v ? 'on' : ''}" data-a="gtype" data-v="${v}" aria-pressed="${t === v}">${l}</button>`;
-  return `<div style="display:flex;flex-direction:column;gap:10px">
+  return `<div style="display:flex;flex-direction:column;gap:10px" data-tour="genre">
     <h2 class="h2">Browse by genre</h2>
     <div class="tabs">${tb('movie', 'Movies')}${tb('tv', 'Series')}</div>
     ${Array.isArray(gs) ? (gs.length ? `<div class="chiprail" data-keep="gchips-${t}">${gs.map(g => `<button class="sel${g.id === sel ? ' on' : ''}" data-a="genre" data-v="${g.id}" aria-pressed="${g.id === sel}">${esc(g.name)}</button>`).join('')}</div>` : '') : ''}
@@ -513,14 +586,16 @@ function library() {
   const L = lib(), f = U.filter;
   const byType = L.filter(x => f.t === 'all' || x.type === f.t);
   const n = s => byType.filter(x => s === 'all' || x.status === s).length;
-  return `<header class="row"><h1 class="h1">Library</h1><div style="display:flex;gap:8px"><button class="rb" data-a="go" data-p="stats" aria-label="Your stats">${ic('chart')}</button><button class="rb" data-a="share" aria-label="Share a list">${ic('share')}</button></div></header>
-  ${L.length ? `<div style="display:flex;gap:8px"><label class="search" style="flex:1;min-width:0">${ic('search', 18)}<input id="lq" type="search" placeholder="Search your library" value="${esc(U.lq)}" autocomplete="off" aria-label="Search your library"></label>
+  const head = `<header class="row"><h1 class="h1">Library</h1><div style="display:flex;gap:8px"><button class="rb" data-a="go" data-p="stats" aria-label="Your stats" data-tour="stats">${ic('chart')}</button><button class="rb" data-a="share" aria-label="Share a list" data-tour="share">${ic('share')}</button></div></header>`;
+  const controls = `${L.length ? `<div style="display:flex;gap:8px" data-tour="lsearch"><label class="search" style="flex:1;min-width:0">${ic('search', 18)}<input id="lq" type="search" placeholder="Search your library" value="${esc(U.lq)}" autocomplete="off" aria-label="Search your library"></label>
     <select class="sortsel" id="lsort" aria-label="Sort by">${Object.entries(SORTS).map(([k, [l]]) => `<option value="${k}"${f.o === k ? ' selected' : ''}>${l}</option>`).join('')}</select></div>` : ''}
   <div class="seg3" role="radiogroup" aria-label="Type" style="background:var(--card);border-radius:16px;padding:4px">
     ${[['all', 'All'], ['movie', 'Movies'], ['tv', 'Series']].map(([v, l]) => `<button role="radio" aria-checked="${f.t === v}" class="${f.t === v ? 'on' : ''}" data-a="ft" data-v="${v}">${l}</button>`).join('')}
   </div>
-  <div class="chips" style="margin-top:-6px">${['all', ...ORDER].map(s => `<button class="sel${f.s === s ? ' on' : ''}" data-a="fs" data-v="${s}" aria-pressed="${f.s === s}">${s === 'all' ? 'All' : ST[s]}<span style="opacity:.6">${n(s)}</span></button>`).join('')}</div>
-  <div id="liblist">${libList()}</div>`;
+  <div class="chips" style="margin-top:-6px">${['all', ...ORDER].map(s => `<button class="sel${f.s === s ? ' on' : ''}" data-a="fs" data-v="${s}" aria-pressed="${f.s === s}">${s === 'all' ? 'All' : ST[s]}<span style="opacity:.6">${n(s)}</span></button>`).join('')}</div>`;
+  const list = `<div id="liblist">${libList()}</div>`;
+  if (!wide()) return head + controls + list;
+  return head + cols(list, `<div class="card" style="display:flex;flex-direction:column;gap:14px">${controls.replace('margin-top:-6px', 'margin-top:0')}</div>`);
 }
 
 function detail() {
@@ -533,34 +608,38 @@ function detail() {
   const title = ok ? (d.title || d.name) : m.title;
   const year = ok ? (d.release_date || d.first_air_date || '').slice(0, 4) : m.year;
   const facts = ok ? (type === 'movie' ? (d.runtime ? `${Math.floor(d.runtime / 60)}h ${d.runtime % 60}m` : '') : (d.number_of_seasons ? `${d.number_of_seasons} season${d.number_of_seasons > 1 ? 's' : ''}` : '')) : '';
-  let out = head + `<div style="display:flex;gap:14px;align-items:flex-start">${poster(ok ? d.poster_path : m.poster, 'lg')}
+  const P = {};
+  P.top = `<div style="display:flex;gap:14px;align-items:flex-start">${poster(ok ? d.poster_path : m.poster, 'lg')}
     <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:6px;align-items:flex-start"><h1 class="h2" style="font-size:20px;line-height:1.25">${esc(title)}</h1>
     <div class="sub">${esc([year, typeName(type), facts].filter(Boolean).join(', '))}</div>${it ? `<span class="chip ${STC[it.status]}">${ST[it.status]}</span>` : ''}</div></div>`;
-
+  let out = '';
   if (it) {
     const idx = ORDER.indexOf(it.status);
     const total = it.total || (ok ? d.number_of_episodes : 0);
     const seg1 = idx === 2 ? 100 : idx === 1 ? (type === 'tv' && total ? Math.round(it.progress / total * 100) : 30) : 0;
     const dot = i => i <= idx ? `<span class="dot on">${ic('check', 12)}</span>` : '<span class="dot off"></span>';
-    out += `<div><div style="display:flex;align-items:center">${dot(0)}<span class="seg"><i style="width:${idx >= 1 ? 100 : 0}%"></i></span>${dot(1)}<span class="seg"><i style="width:${seg1}%"></i></span>${dot(2)}</div>
+    out += `<div data-tour="status"><div style="display:flex;align-items:center">${dot(0)}<span class="seg"><i style="width:${idx >= 1 ? 100 : 0}%"></i></span>${dot(1)}<span class="seg"><i style="width:${seg1}%"></i></span>${dot(2)}</div>
       <div class="row" style="margin-top:6px;align-items:flex-start">${ORDER.map((s, i) => `<button class="stepl" data-a="setst" data-v="${s}" aria-label="Mark as ${ST[s]}" style="align-items:${['flex-start', 'center', 'flex-end'][i]};color:${i <= idx ? 'var(--ink)' : 'var(--muted)'}"><span>${ST[s]}</span>${it.statusAt?.[s] && i <= idx ? `<span class="tiny">${fDate(it.statusAt[s])}</span>` : ''}</button>`).join('')}</div></div>`;
   } else {
-    out += `<div class="g2"><button class="sec" data-a="add" data-v="planning">${ic('bookmarkPlus', 18)}Add to Planning</button><button class="sec" data-a="add" data-v="finished">${ic('check', 18)}Already watched</button></div>`;
+    out += `<div class="g2" data-tour="add"><button class="sec" data-a="add" data-v="planning">${ic('bookmarkPlus', 18)}Add to Planning</button><button class="sec" data-a="add" data-v="finished">${ic('check', 18)}Already watched</button></div>`;
     out += isHidden(type, id)
       ? `<div class="card row" style="padding:12px 16px"><span class="sub" style="display:flex;gap:8px;align-items:center">${ic('eyeOff', 16)}Marked as not interested</span><button class="pill sm" data-a="unhide" data-t="${type}" data-id="${id}" style="background:var(--card2)">Undo</button></div>`
       : `<button class="sub" data-a="hide" style="display:flex;gap:6px;align-items:center;justify-content:center;min-height:36px;margin-top:-8px">${ic('eyeOff', 16)}Not interested</button>`;
   }
 
+  P.status = out; out = '';
   if (ok) { const tr = trailerOf(d); out += tr ? `<button class="cta" data-a="trailer" data-v="${esc(tr.key)}">${ic('play', 18)}Watch trailer</button>` : `<p class="sub" style="text-align:center;margin:0">No trailer on TMDB for this title yet.</p>`; }
   else out += `<p class="sub" style="text-align:center;margin:0">Connect to the internet to see the trailer and full details.</p>`;
+  P.trailer = out; out = '';
   if (ok) out += whereToWatch(d);
   if (ok && type === 'tv' && d.next_episode_to_air?.air_date && airDay(d.next_episode_to_air.air_date) >= 0) {
     const n = d.next_episode_to_air;
     out += `<div class="card row" style="justify-content:flex-start;gap:12px"><span class="ico">${ic('calendar', 20)}</span><span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px"><span class="t15">Next episode: ${airLabel(n.air_date)}</span><span class="sub clamp">Season ${n.season_number}, episode ${n.episode_number}${n.name && !/^Episode \d+$/.test(n.name) ? `: ${esc(n.name)}` : ''}</span></span></div>`;
   }
 
+  P.where = out; out = '';
   if (it) {
-    out += `<div class="card"><div class="row"><span class="t15">Your rating</span><span class="sub">${it.rating ? `${it.rating} out of 5` : 'Not rated yet'}</span></div>
+    out += `<div class="card" data-tour="rate"><div class="row"><span class="t15">Your rating</span><span class="sub">${it.rating ? `${it.rating} out of 5` : 'Not rated yet'}</span></div>
       <div class="stars" style="margin:6px 0 -6px -10px">${[1, 2, 3, 4, 5].map(n => `<button data-a="rate" data-v="${n}" aria-label="Rate ${n} out of 5" aria-pressed="${n <= it.rating}">${ic('star', 26, n <= it.rating)}</button>`).join('')}</div></div>`;
     const total = it.total || (ok ? d.number_of_episodes : 0);
     const last = epAt(it, it.progress), next = total && it.progress >= total ? null : epAt(it, it.progress + 1);
@@ -570,9 +649,11 @@ function detail() {
       <div class="g2" style="margin-top:14px"><button class="sec" data-a="ep" data-v="-1"${it.progress <= 0 ? ' disabled' : ''}>${ic('minus', 18)}One less</button><button class="sec" data-a="ep" data-v="1"${total && it.progress >= total ? ' disabled' : ''}>${ic('plus', 18)}Watched one</button></div>${it.seasons?.length ? `<button class="sec" data-a="pickep" style="margin-top:10px">${ic('list', 18)}Choose episode</button>` : ''}</div>`;
   }
 
+  P.mine = out; out = '';
   if (ok && d.overview) out += `<div class="card"><div class="t15">Story</div><p style="margin:8px 0 0;font-size:14px;line-height:1.5;color:var(--muted)">${esc(d.overview)}</p></div>`;
   const cast = ok ? uniq(d.credits?.cast || [], p => p.id).slice(0, 15) : [];
   if (cast.length) out += section('Cast', `<div class="rail" data-keep="cast">${cast.map(p => `<button class="cw" data-a="person" data-id="${p.id}">${avatar(p.profile_path)}<span class="rt" style="text-align:center">${esc(p.name)}</span>${p.character ? `<span class="tiny clamp" style="margin-top:-4px;width:100%;text-align:center">${esc(p.character)}</span>` : ''}</button>`).join('')}</div>`);
+  P.story = out; out = '';
   if (ok) {
     let lang = d.original_language; try { lang = new Intl.DisplayNames(['en'], { type: 'language' }).of(d.original_language); } catch (e) {}
     const rows = [
@@ -586,8 +667,10 @@ function detail() {
     out += `<div class="card" style="padding:12px"><div class="sub" style="padding:4px 4px 10px;font-size:14px">Details</div><div class="inner">${rows.map(([l, v]) => `<div class="li"><span class="sub">${l}</span><span style="font-weight:600;text-align:right">${esc(v)}</span></div>`).join('')}</div></div>`;
   }
   if (it && it.history?.length) out += `<div class="card" style="padding:12px"><div class="sub" style="padding:4px 4px 6px;font-size:14px">Your history</div><div class="inner">${it.history.map(h => `<div class="tl"><div><div style="font-weight:600;font-size:14px">${fTime(h.at)}</div><div class="tiny">${fDate(h.at)}</div></div><span class="dot on">${ic('check', 12)}</span><div class="sub" style="font-size:13px;padding-top:2px">${esc(h.text)}</div></div>`).join('')}</div></div>`;
-  if (ok) out += related(type, id, d);
-  return out;
+  P.facts = out;
+  P.related = ok ? related(type, id, d) : '';
+  if (!wide()) return head + P.top + P.status + P.trailer + P.where + P.mine + P.story + P.facts + P.related;
+  return head + cols(P.top + P.status + P.trailer + P.mine + P.story, P.where + P.facts) + P.related;
 }
 
 // Bottom of the detail page: seasons or the rest of the movie series, then similar titles.
@@ -621,7 +704,7 @@ function whereToWatch(d) {
   const out = d.release_date ? airDay(d.release_date) : null;
   const groups = r ? [['Stream', r.flatrate], ['Free', [...(r.free || []), ...(r.ads || [])]], ['Rent', r.rent], ['Buy', r.buy]].filter(g => g[1]?.length) : [];
   const logo = p => `<img src="${IMGB}w92${esc(p.logo_path)}" alt="${esc(p.provider_name)}" title="${esc(p.provider_name)}" loading="lazy">`;
-  return `<div class="card"><div class="row"><span class="t15">Where to watch</span><button class="sub" data-a="go" data-p="settings" style="min-height:32px;display:flex;gap:4px;align-items:center">${ic('globe', 14)}${esc(countryName(rc))}</button></div>
+  return `<div class="card" data-tour="where"><div class="row"><span class="t15">Where to watch</span><button class="sub" data-a="go" data-p="settings" style="min-height:32px;display:flex;gap:4px;align-items:center">${ic('globe', 14)}${esc(countryName(rc))}</button></div>
     ${groups.length ? groups.map(([l, ps]) => `<div style="margin-top:12px"><div class="tiny" style="margin-bottom:6px">${l}</div><div class="prov">${uniq(ps, p => p.provider_id).slice(0, 8).map(logo).join('')}</div></div>`).join('')
       : `<p class="sub" style="margin:8px 0 0">${out !== null && out > 0 ? `Not released yet. It comes out ${fDate(d.release_date + 'T00:00:00')}, and streaming usually follows a few weeks to a few months after that.`
         : out !== null && out > -120 ? `Still in cinemas. It isn't on a streaming service in ${esc(countryName(rc))} yet. New films usually arrive one to three months after release.`
@@ -656,9 +739,10 @@ function stats() {
   const yMins = inYr.reduce((a, x) => a + mins(x), 0);
   U.yearText = inYr.length ? `My ${yr} on Watchd: ${inYr.length} ${inYr.length === 1 ? 'title' : 'titles'} finished (${inYr.filter(x => x.type === 'movie').length} movies, ${inYr.filter(x => x.type === 'tv').length} series)${yMins ? `, about ${hrs(yMins)} of watching` : ''}.${yTop ? ` Top genre: ${yTop}.` : ''}${best ? ` Favorite: ${best.title} (${best.rating}/5).` : ''}` : '';
   const stat = (v, l) => `<div class="stat"><b>${v}</b><span class="sub">${l}</span></div>`;
-  return head + `<section class="blk"><div class="cap">Total time watched</div><div class="amt">${hrs(total)}</div><div class="cap" style="margin-top:4px">${fin.filter(x => x.type === 'movie').length} movies finished, ${eps.toLocaleString()} episodes watched</div></section>
+  return head + `<div class="cols"><div><section class="blk"><div class="cap">Total time watched</div><div class="amt">${hrs(total)}</div><div class="cap" style="margin-top:4px">${fin.filter(x => x.type === 'movie').length} movies finished, ${eps.toLocaleString()} episodes watched</div></section>
   <div class="g2">${stat(fin.length, 'Finished')}${stat(seen.filter(x => x.status === 'watching').length, 'Watching now')}${stat(lib().filter(x => x.status === 'planning').length, 'Planning')}${stat(avg ? avg.toFixed(1) : '–', rated.length ? `Average rating (${rated.length} rated)` : 'Average rating')}</div>
   ${top.length ? `<div class="card"><div class="t15">Top genres</div><div style="display:flex;flex-direction:column;gap:12px;margin-top:14px">${top.map(([g, c]) => `<div><div class="row" style="font-size:14px"><span>${esc(g)}</span><span class="sub">${c} ${c === 1 ? 'title' : 'titles'}</span></div><div class="bar" style="margin-top:6px"><i style="width:${Math.round(c / top[0][1] * 100)}%"></i></div></div>`).join('')}</div></div>` : ''}
+  </div><div>
   <div class="card" style="padding:12px"><div class="row" style="padding:4px 4px 10px"><span class="t15">Your ${yr}</span><span class="sub">${inYr.length} finished</span></div>
     ${inYr.length ? `<div class="inner">${[
       ['Movies finished', inYr.filter(x => x.type === 'movie').length], ['Series finished', inYr.filter(x => x.type === 'tv').length],
@@ -668,7 +752,7 @@ function stats() {
       : `<p class="sub" style="margin:0 4px 4px">Nothing finished in ${yr} yet. Mark a title as Finished and it counts here.</p>`}
   </div>
   ${inYr.length ? `<button class="cta" data-a="shareyear">${ic('share', 18)}Share my ${yr}</button>` : ''}
-  <p class="tiny" style="margin:0;text-align:center">${left ? `Updating with details from TMDB, ${left} ${left === 1 ? 'title' : 'titles'} left.` : 'Times are estimates from TMDB runtimes and the episodes you marked as watched.'}</p>`;
+  <p class="tiny" style="margin:0;text-align:center">${left ? `Updating with details from TMDB, ${left} ${left === 1 ? 'title' : 'titles'} left.` : 'Times are estimates from TMDB runtimes and the episodes you marked as watched.'}</p></div></div>`;
 }
 
 function person() {
@@ -683,23 +767,26 @@ function person() {
   const known = [...credits].sort((a, b) => (b.vote_count || 0) - (a.vote_count || 0)).slice(0, 15).map(slimRes).filter(Boolean);
   const all = [...credits].sort((a, b) => (b.release_date || b.first_air_date || '').localeCompare(a.release_date || a.first_air_date || '')).slice(0, 60);
   const born = [d.birthday ? `Born ${fDate(d.birthday + 'T00:00:00')}` : '', d.place_of_birth || ''].filter(Boolean).join(', ');
-  let out = head + `<div style="display:flex;gap:16px;align-items:center">${avatar(d.profile_path, 'lg')}<div style="min-width:0;display:flex;flex-direction:column;gap:4px"><h1 class="h2" style="font-size:20px;line-height:1.25">${esc(d.name)}</h1><div class="sub">${esc(d.known_for_department || '')}</div>${born ? `<div class="tiny">${esc(born)}</div>` : ''}</div></div>`;
+  let out = `<div style="display:flex;gap:16px;align-items:center">${avatar(d.profile_path, 'lg')}<div style="min-width:0;display:flex;flex-direction:column;gap:4px"><h1 class="h2" style="font-size:20px;line-height:1.25">${esc(d.name)}</h1><div class="sub">${esc(d.known_for_department || '')}</div>${born ? `<div class="tiny">${esc(born)}</div>` : ''}</div></div>`;
   if (d.biography) out += `<div class="card"><div class="t15">About</div><p class="bio${U.bioOpen ? '' : ' short'}" style="margin-top:8px">${esc(d.biography)}</p>${d.biography.length > 320 ? `<button class="sub" data-a="bio" style="margin-top:8px;color:var(--ink);font-weight:500;min-height:32px">${U.bioOpen ? 'Show less' : 'Read more'}</button>` : ''}</div>`;
   if (known.length) out += section('Known for', `<div class="rail" data-keep="known">${known.map(m => railCard(m)).join('')}</div>`);
-  if (all.length) out += section('All titles', `<div class="card" style="padding:12px"><div class="inner">${all.map(x => { const m = slimRes(x); if (!m) return ''; const role = x.character || x.job; return rowItem(m, '', role ? `, ${esc(role)}` : ''); }).join('')}</div></div>`);
-  return out;
+  const side = all.length ? section('All titles', `<div class="card" style="padding:12px"><div class="inner">${all.map(x => { const m = slimRes(x); if (!m) return ''; const role = x.character || x.job; return rowItem(m, '', role ? `, ${esc(role)}` : ''); }).join('')}</div></div>`) : '';
+  return head + cols(out, side);
 }
 
 function ask() {
   const sugg = ['Movies like Interstellar', 'A feel-good comedy series', 'Korean thrillers from the last five years', 'What should I watch next based on my library?'];
-  return `<header class="row"><h1 class="h1">Ask</h1>${S.chat.length ? `<button class="rb" data-a="clearchat" data-v="chat" aria-label="Clear chat">${ic('refresh')}</button>` : ''}</header>
-  <p class="sub" style="margin:-10px 0 0">Picks come only from TMDB's catalog and take your library into account.</p>
-  ${S.chat.length ? '' : `<div class="card"><div class="t15">Try asking</div><div class="chips" style="margin-top:12px">${sugg.map(s => `<button class="sel" data-a="suggest" data-v="${esc(s)}" style="height:auto;min-height:38px;padding:8px 14px;text-align:left">${esc(s)}</button>`).join('')}</div></div>`}
-  <div class="thread">${S.chat.map(m => {
+  const head = `<header class="row"><h1 class="h1">Ask</h1>${S.chat.length ? `<button class="rb" data-a="clearchat" data-v="chat" aria-label="Clear chat">${ic('refresh')}</button>` : ''}</header>`;
+  const note = `<p class="sub" style="margin:-10px 0 0">Picks come only from TMDB's catalog and take your library into account.</p>`;
+  const tryCard = `<div class="card"><div class="t15">Try asking</div><div class="chips" style="margin-top:12px">${sugg.map(s => `<button class="sel" data-a="suggest" data-v="${esc(s)}" style="height:auto;min-height:38px;padding:8px 14px;text-align:left">${esc(s)}</button>`).join('')}</div></div>`;
+  const thread = `<div class="thread">${S.chat.map(m => {
     if (m.role === 'user') return `<div class="msg me">${esc(m.text)}</div>`;
     (m.picks || []).forEach(p => U.metas.set(K(p.type, p.id), p));
     return `<div class="msg ai"${m.err ? ' style="color:var(--muted)"' : ''}>${esc(m.text)}</div>${m.picks?.length ? `<div class="card" style="padding:12px"><div class="inner">${shown(m.picks).map(p => pickRow(p)).join('')}</div></div>` : ''}`;
   }).join('')}${U.busy ? '<div class="msg ai" style="color:var(--muted)">Looking through TMDB…</div>' : ''}</div>`;
+  if (!wide()) return head + note + (S.chat.length ? '' : tryCard) + thread;
+  const main = S.chat.length || U.busy ? thread : `<div class="card empty">${ic('sparkles', 22)}<div class="t15">Ask for picks</div><div class="sub">Describe what you feel like watching, or start with one of the ideas on the right.</div></div>`;
+  return head + cols(main, tryCard + note.replace('margin:-10px 0 0', 'margin:0 4px'));
 }
 function pickRow(p) {
   const have = get(p.type, p.id);
@@ -714,14 +801,16 @@ function shared() {
   const v = U.shared; if (!v) return home();
   const rows = v.entries.map(e => ({ e, m: metaFor(e.type, e.id) }));
   const loading = rows.some(r => !r.m);
-  return `<header class="row"><button class="rb ghost" data-a="back" aria-label="Back">${ic('chevL')}</button><span class="t15" style="font-weight:500">Shared list</span><span style="width:44px"></span></header>
-  <div class="card"><div class="t15" style="font-size:17px">${esc(v.name)}</div><div class="sub" style="margin-top:4px">${v.by ? `From ${esc(v.by)}, ` : ''}${v.entries.length} title${v.entries.length === 1 ? '' : 's'}</div></div>
+  const head = `<header class="row"><button class="rb ghost" data-a="back" aria-label="Back">${ic('chevL')}</button><span class="t15" style="font-weight:500">Shared list</span><span style="width:44px"></span></header>`;
+  const info = `<div class="card"><div class="t15" style="font-size:17px">${esc(v.name)}</div><div class="sub" style="margin-top:4px">${v.by ? `From ${esc(v.by)}, ` : ''}${v.entries.length} title${v.entries.length === 1 ? '' : 's'}</div></div>
   <button class="cta" data-a="saveall">${ic('bookmarkPlus', 18)}Save all to my library</button>
-  <div class="g2"><button class="sec" data-a="exportshared" data-v="json">${ic('file', 18)}Export list</button><button class="sec" data-a="exportshared" data-v="csv">${ic('sheet', 18)}Spreadsheet</button></div>
-  <div class="card" style="padding:12px"><div class="inner">${rows.map(({ e, m }) => m
+  <div class="g2"><button class="sec" data-a="exportshared" data-v="json">${ic('file', 18)}Export list</button><button class="sec" data-a="exportshared" data-v="csv">${ic('sheet', 18)}Spreadsheet</button></div>`;
+  const list = `<div class="card" style="padding:12px"><div class="inner">${rows.map(({ e, m }) => m
     ? rowItem({ ...m, rating: 0 }, `<span class="chip ${STC[e.status]}">${ST[e.status]}</span>`, get(e.type, e.id) ? ', saved' : '')
-    : `<div class="li"><span class="sub">Loading title…</span></div>`).join('')}</div></div>
-  ${loading ? '<p class="tiny" style="margin:0;text-align:center">Loading titles from TMDB…</p>' : ''}`;
+    : `<div class="li"><span class="sub">Loading title…</span></div>`).join('')}</div></div>`;
+  const foot = loading ? '<p class="tiny" style="margin:0;text-align:center">Loading titles from TMDB…</p>' : '';
+  if (!wide()) return head + info + list + foot;
+  return head + cols(list + foot, info);
 }
 
 const SYNC = { syncing: 'Syncing…', ok: 'Up to date', offline: 'Waiting for connection', error: "Couldn't sync" };
@@ -745,6 +834,7 @@ function settings() {
   const th = S.theme || 'auto';
   const opt = (v, icon, label) => `<button role="radio" aria-checked="${th === v}" class="${th === v ? 'on' : ''}" data-a="theme" data-v="${v}">${ic(icon, 18)}${label}</button>`;
   return `<h1 class="h1">Settings</h1>
+  <div class="masonry">
   <div class="card row">
     <div style="display:flex;gap:14px;align-items:center;min-width:0">
       <div class="av" style="background:var(--fill);color:var(--on)">${esc(S.name[0].toUpperCase())}</div>
@@ -770,7 +860,7 @@ function settings() {
   <div class="card" style="padding:12px">
     <div class="sub" style="display:flex;gap:8px;align-items:center;padding:2px 4px 10px;font-size:14px">${ic('sun', 18)}Appearance</div>
     <div class="seg3" role="radiogroup" aria-label="Appearance">${opt('light', 'sun', 'Day')}${opt('dark', 'moon', 'Night')}${opt('auto', 'phone', 'Auto')}</div>
-    <p class="tiny" style="margin:10px 4px 2px">Auto follows your iPhone's light or dark setting.</p>
+    <p class="tiny" style="margin:10px 4px 2px">Auto follows your ${isIOS() ? 'iPhone' : 'device'}'s light or dark setting.</p>
   </div>
   <div class="card" style="padding:12px">
     <div class="sub" style="display:flex;gap:8px;align-items:center;padding:2px 4px 10px;font-size:14px">${ic('download', 18)}Backup</div>
@@ -783,9 +873,11 @@ function settings() {
   </div>
   ${standalone ? '' : `<div class="card" style="display:flex;gap:14px;align-items:flex-start">
     <div class="logo" style="width:44px;height:44px;border-radius:12px;flex-shrink:0">${LOGO(30)}</div>
-    <div><div class="t15">Use it like an app</div><div class="sub" style="margin-top:3px;font-size:13.5px">In Safari, tap Share, then Add to Home Screen. Watchd opens full screen, and your library is still there when you're offline.</div></div>
+    <div><div class="t15">Use it like an app</div><div class="sub" style="margin-top:3px;font-size:13.5px">${installHint()}</div></div>
   </div>`}
-  <button class="sec danger" data-a="erase">${ic('trash', 18)}Erase all data</button>`;
+  <button class="sec" data-a="tipsagain">${ic('star', 18)}Show tips again</button>
+  <button class="sec danger" data-a="erase">${ic('trash', 18)}Erase all data</button>
+  </div>`;
 }
 
 /* ===== Search sheet ===== */
@@ -883,6 +975,84 @@ function parseShareHash() {
     return { name: String(p.n || 'Shared list').slice(0, 80), by: String(p.by || '').slice(0, 40), entries };
   } catch (e) { toast('This shared link is broken. Ask for a new one.'); return null; }
 }
+
+/* ===== Guided tour ===== */
+const TOURS = {
+  main: [
+    { el: '[data-tour="find"]', t: 'Find a title', d: 'Search any movie or series, then add it to your list.' },
+    { el: '[data-tour="continue"]', t: 'Continue watching', d: 'Series you are watching. Tap one to mark the next episode.' },
+    { el: '[data-tour="trending"]', t: 'Tap a poster', d: 'See the trailer, where to stream it, the cast and what to watch next.' },
+    { el: '[data-tour="genre"]', t: 'Browse by genre', d: 'Switch between movies and series, then pick a genre.' },
+    { el: '.nav [data-p="library"]', t: 'Your library', d: 'Everything you saved, with search, filters and your stats.' },
+    { el: '.nav .act', t: 'Ask for picks', d: 'Describe what you feel like watching and get picks from TMDB.' },
+    { el: '.nav [data-p="settings"]', t: 'Settings', d: 'Google sync, streaming country, import, backup, and Show tips again.' },
+  ],
+  library: [
+    { el: '[data-tour="lsearch"]', t: 'Search and sort', d: 'Find a title fast, and sort by date, title, rating or year.' },
+    { el: '[data-tour="stats"]', t: 'Your stats', d: 'Hours watched, top genres and a summary of your year to share.' },
+    { el: '[data-tour="share"]', t: 'Share a list', d: 'Send a link to your list. Your ratings and history stay private.' },
+  ],
+  detail: [
+    { el: '[data-tour="add"]', t: 'Save it', d: 'Add it to Planning, or mark it as already watched.' },
+    { el: '[data-tour="status"]', t: 'Your progress', d: 'Tap a step to move it between Planning, Watching and Finished.' },
+    { el: '[data-tour="where"]', t: 'Where to watch', d: 'Services that stream, rent or sell it in your country.' },
+    { el: '[data-tour="rate"]', t: 'Rate it', d: 'Your ratings shape your picks and the rows on Home.' },
+    { el: '[data-a="pickep"]', t: 'Choose episode', d: 'Jump to any season and episode you are up to.' },
+    { el: '[data-a="hide"]', t: 'Not interested', d: 'Hide it from Trending, genre rows and Ask picks.' },
+  ],
+};
+let tour = null;
+const onScreen = sel => { const e = document.querySelector(sel); if (!e) return null; const b = e.getBoundingClientRect(); return b.width && b.height ? e : null; };
+function maybeTour(id) {
+  if (tour || S.tips?.[id]) return;
+  setTimeout(() => {
+    if (tour || S.tips?.[id] || !S.name || $('.scrim')) return;
+    const steps = TOURS[id].filter(st => onScreen(st.el)).slice(0, id === 'main' ? 9 : 4); if (!steps.length) return;
+    tour = { id, steps, i: 0 };
+    document.body.insertAdjacentHTML('beforeend', `<div class="tour" id="tour" role="dialog" aria-modal="true" aria-labelledby="tourT">
+      <div class="tour-ring"></div>
+      <div class="tour-tip"><div class="tour-arrow"></div><div class="t15" id="tourT"></div><div class="tour-d" id="tourD"></div>
+        <div class="row"><span class="tiny" id="tourN"></span><div style="display:flex;gap:4px;align-items:center">
+          <button class="tour-skip" data-tour-act="skip">Skip</button><button class="tour-next" data-tour-act="next">Next</button></div></div>
+      </div></div>`);
+    showStep();
+  }, 450);
+}
+function showStep() {
+  const st = tour.steps[tour.i], e = onScreen(st.el); if (!e) return nextStep();
+  if (!e.closest('.navwrap')) e.scrollIntoView({ block: 'center' });
+  const $id = id => document.getElementById(id);
+  $id('tourT').textContent = st.t; $id('tourD').textContent = st.d; $id('tourN').textContent = `${tour.i + 1} of ${tour.steps.length}`;
+  const next = document.querySelector('[data-tour-act="next"]'); next.textContent = tour.i === tour.steps.length - 1 ? 'Done' : 'Next';
+  placeTour(); next.focus({ preventScroll: true }); requestAnimationFrame(placeTour);
+}
+function placeTour() {
+  if (!tour) return; const e = onScreen(tour.steps[tour.i].el); if (!e) return;
+  const b = e.getBoundingClientRect(), pad = 6, gap = 16, vw = innerWidth, vh = innerHeight;
+  const ring = document.querySelector('.tour-ring'), tip = document.querySelector('.tour-tip'), arrow = document.querySelector('.tour-arrow');
+  if (!ring || !tip) return;
+  Object.assign(ring.style, { left: `${b.left - pad}px`, top: `${b.top - pad}px`, width: `${b.width + pad * 2}px`, height: `${b.height + pad * 2}px`,
+    borderRadius: `${(parseFloat(getComputedStyle(e).borderTopLeftRadius) || 10) + pad}px` });
+  const tw = tip.offsetWidth, th = tip.offsetHeight;
+  if (vw >= 1024 && e.closest('.navwrap')) { // desktop sidebar: tip on the right
+    const y = Math.min(Math.max(b.top + b.height / 2 - th / 2, 8), vh - th - 8);
+    Object.assign(tip.style, { left: `${b.right + pad + gap}px`, top: `${y}px` });
+    Object.assign(arrow.style, { left: '-6px', top: `${Math.min(Math.max(b.top + b.height / 2 - y - 7, 14), th - 28)}px`, bottom: 'auto' }); return;
+  }
+  const below = b.bottom + pad + gap + th <= vh - 8 || b.top - pad - gap - th < 8;
+  const x = Math.min(Math.max(b.left + b.width / 2 - tw / 2, 16), vw - tw - 16);
+  const y = below ? Math.min(b.bottom + pad + gap, vh - th - 8) : b.top - pad - gap - th;
+  Object.assign(tip.style, { left: `${x}px`, top: `${Math.max(8, y)}px` });
+  Object.assign(arrow.style, { left: `${Math.min(Math.max(b.left + b.width / 2 - x - 7, 18), tw - 32)}px`, top: below ? '-6px' : 'auto', bottom: below ? 'auto' : '-6px' });
+}
+function nextStep() { if (!tour) return; tour.i++; tour.i >= tour.steps.length ? endTour() : showStep(); }
+// quiet: close without marking the tour as seen (used when resetting tips or erasing).
+function endTour(quiet) { if (!tour) return; if (!quiet) { S.tips = { ...(S.tips || {}), [tour.id]: true }; persist(); } tour = null; document.getElementById('tour')?.remove(); }
+document.addEventListener('click', e => { const b = e.target.closest('[data-tour-act]'); if (b) b.dataset.tourAct === 'next' ? nextStep() : endTour(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && tour) endTour(); });
+addEventListener('resize', placeTour); addEventListener('scroll', placeTour, { passive: true });
+// Phone and two-column layouts order some pages differently, so re-render when crossing 768px.
+wideMQ.addEventListener?.('change', () => { if (S.name) keepRender(); });
 
 /* ===== Import from Letterboxd and IMDb ===== */
 function parseCSV(text) {
@@ -1151,11 +1321,12 @@ const A = {
     const ok = await saveFile(`watchd-backup-${today()}.json`, JSON.stringify({ app: 'watchd', kind: 'backup', v: 1, savedAt: new Date().toISOString(), data: { name: S.name, theme: S.theme, items: S.items, chat: S.chat } }, null, 2), 'application/json');
     if (ok) toast('Backup saved');
   },
+  tipsagain() { endTour(true); S.tips = {}; persist(); go('home'); },
   erase() {
     confirmSheet('Erase all data?', "This deletes your library, ratings, history and chat from this device. It can't be undone.", 'Erase all data', () => {
       if (U.user) fb?.auth.signOut();
-      localStorage.removeItem(KEY); S = blank(); applyTheme('auto');
-      Object.assign(U, { page: 'home', stack: [], cur: null, user: null, shared: null, draft: '', filter: { s: 'all', t: 'all' } });
+      endTour(true); localStorage.removeItem(KEY); S = blank(); applyTheme('auto');
+      Object.assign(U, { page: 'home', stack: [], cur: null, user: null, shared: null, draft: '', filter: { s: 'all', t: 'all', o: 'recent' } });
       render(); scrollTo(0, 0); toast('All data erased');
     });
   },
