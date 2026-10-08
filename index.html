@@ -453,6 +453,7 @@ function installHint() {
 
 /* ===== Render ===== */
 function render() {
+  if (FB.apiKey && !fb && (!S.name || U.page === 'settings')) loadFB().catch(() => {});
   if (!S.name) { $('#root').innerHTML = welcome(); $('#navroot').innerHTML = ''; document.body.classList.remove('nav-on'); return; }
   const p = U.page;
   if (p === 'detail' && !U.cur) U.page = 'home';
@@ -1145,10 +1146,14 @@ async function importCSV(files) {
 }
 
 /* ===== Google sign-in and sync (Firebase) ===== */
-let fb = null;
+let fb = null, fbP = null;
 const loadScript = src => new Promise((ok, bad) => { const s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = bad; document.head.append(s); });
-async function loadFB() {
-  if (fb) return fb; if (!FB.apiKey) return null;
+// Loads Firebase once; parallel calls share the same promise.
+function loadFB() {
+  if (fb) return Promise.resolve(fb); if (!FB.apiKey) return Promise.resolve(null);
+  return fbP ||= startFB().catch(e => { fbP = null; throw e; });
+}
+async function startFB() {
   const v = '10.12.2';
   for (const m of ['app', 'auth', 'firestore']) await loadScript(`https://www.gstatic.com/firebasejs/${v}/firebase-${m}-compat.js`);
   // On the live site, sign-in runs through this domain (vercel.json forwards /__/auth to Firebase).
@@ -1156,7 +1161,13 @@ async function loadFB() {
   const local = /^(localhost|127\.0\.0\.1)$/.test(location.hostname);
   firebase.initializeApp({ ...FB, authDomain: local ? FB.authDomain : location.host });
   fb = { auth: firebase.auth(), db: firebase.firestore() };
-  fb.auth.getRedirectResult().catch(e => toast(signInError(e))).finally(() => { if (authPending()) { authPending(false); setSigning(false); } });
+  // Only a sign-in that was already on its way back from Google when this page opened is finished here.
+  // (Checking the flag now would also catch, and wrongly clear, a redirect that is just starting.)
+  const returning = RETURNING;
+  fb.auth.getRedirectResult()
+    .then(r => { if (returning && !r?.user && !fb.auth.currentUser) toast("Sign-in didn't finish. Try again."); })
+    .catch(e => toast(signInError(e)))
+    .finally(() => { if (returning) { authPending(false); if (!fb.auth.currentUser) setSigning(false); } });
   fb.auth.onAuthStateChanged(onUser);
   return fb;
 }
@@ -1164,23 +1175,24 @@ const signInError = e => /unauthorized-domain/.test(e.code || '') ? "This site i
   : /network-request-failed/.test(e.code || '') ? "You're offline. Connect to sign in." : "Sign-in didn't finish. Try again.";
 // Set while Google sends you away and back (redirect sign-in), so the app finishes signing in when it reopens.
 const authPending = v => { try { if (v === undefined) return localStorage.getItem('watchd-auth') === '1'; v ? localStorage.setItem('watchd-auth', '1') : localStorage.removeItem('watchd-auth'); } catch (e) {} };
+const RETURNING = authPending();
 function setSigning(v) { U.signing = v; document.querySelectorAll('[data-a="google"]').forEach(b => { b.disabled = v; b.lastChild.textContent = v ? 'Signing in…' : 'Continue with Google'; }); }
-async function signIn() {
+function signIn() {
   if (U.signing) return;
+  if (!FB.apiKey) return toast("Google sign-in isn't connected yet. Add your Firebase settings to turn it on.");
   setSigning(true);
-  let f; try { f = await loadFB(); } catch (e) { setSigning(false); return toast("You're offline. Connect to sign in."); }
-  if (!f) { setSigning(false); return toast("Google sign-in isn't connected yet. Add your Firebase settings to turn it on."); }
-  const provider = new firebase.auth.GoogleAuthProvider();
+  // Firebase is preloaded on screens with the Google button. If it is still loading, wait and try again;
+  // the popup may then be blocked, in which case sign-in falls back to the redirect.
+  if (!fb) return loadFB().then(() => { U.signing = false; signIn(); }, () => { setSigning(false); toast("You're offline. Connect to sign in."); });
+  const f = fb, provider = new firebase.auth.GoogleAuthProvider();
   provider.setCustomParameters({ prompt: 'select_account' });
   // Home Screen apps can't open popups reliably, so they go to Google and come back instead.
   const standalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone;
   const redirect = () => { authPending(true); return f.auth.signInWithRedirect(provider); };
-  try { if (standalone) return await redirect(); await f.auth.signInWithPopup(provider); }
-  catch (e) {
-    if (/popup-blocked|operation-not-supported/.test(e.code || '')) { try { return await redirect(); } catch (e2) { e = e2; authPending(false); } }
-    if (!/popup-closed|cancelled-popup/.test(e.code || '')) toast(signInError(e));
-    setSigning(false);
-  }
+  const fail = e => { authPending(false); if (!/popup-closed|cancelled-popup/.test(e.code || '')) toast(signInError(e)); setSigning(false); };
+  // The popup is opened straight from the tap (no waiting first), so browsers don't block it.
+  if (standalone) return redirect().catch(fail);
+  f.auth.signInWithPopup(provider).catch(e => /popup-blocked|operation-not-supported/.test(e.code || '') ? redirect().catch(fail) : fail(e));
 }
 // Newest change wins, per title and per hidden entry. Returns true if anything on this device changed.
 function mergeCloud(c) {
